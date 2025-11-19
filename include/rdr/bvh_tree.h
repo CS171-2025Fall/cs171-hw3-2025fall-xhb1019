@@ -5,6 +5,8 @@
 #ifndef __BVH_TREE_H__
 #define __BVH_TREE_H__
 
+#include <algorithm>
+
 #include "rdr/accel.h"
 #include "rdr/platform.h"
 #include "rdr/primitive.h"
@@ -133,20 +135,8 @@ typename BVHTree<_>::IndexType BVHTree<_>::build(
   for (IndexType span_index = span_left; span_index < span_right; ++span_index)
     prebuilt_aabb.unionWith(nodes[span_index].getAABB());
 
-  // TODO(HW3): setup the stop criteria
-  //
-  // You should fill in the stop criteria here.
-  //
-  // You may find the following variables useful:
-  //
-  // @see CUTOFF_DEPTH: The maximum depth you would like to build
-  // @see span_left: The left index of the current span
-  // @see span_right: The right index of the current span
-  //
-  /* if ( */ UNIMPLEMENTED; /* ) */
-  {
-    // create leaf node
-    const auto &node = nodes[span_left];
+  const IndexType count = span_right - span_left;
+  if (count <= 2 || depth >= CUTOFF_DEPTH) {
     InternalNode result(span_left, span_right);
     result.is_leaf = true;
     result.aabb    = prebuilt_aabb;
@@ -163,7 +153,6 @@ typename BVHTree<_>::IndexType BVHTree<_>::build(
 
   // const int &dim = depth % 3;
   const int &dim  = ArgMax(prebuilt_aabb.getExtent());
-  IndexType count = span_right - span_left;
   IndexType split = INVALID_INDEX;
 
   if (hprofile == EHeuristicProfile::EMedianHeuristic) {
@@ -173,15 +162,12 @@ use_median_heuristic:
     // after which, all centroids in [span_left, split) are LT than right
     // clang-format off
 
-    // TODO(HW3): implement the median split here
-    //
-    // You should sort the nodes in [span_left, span_right) according to
-    // their centroid's `dim`-th dimension, such that all nodes in
-    // [span_left, split) are less than those in [split, span_right)
-    //
-    // You may find `std::nth_element` useful here.
-
-    UNIMPLEMENTED;
+    auto first = nodes.begin() + span_left;
+    auto mid   = nodes.begin() + split;
+    auto last  = nodes.begin() + span_right;
+    std::nth_element(first, mid, last, [dim](const NodeType &a, const NodeType &b) {
+      return a.getAABB().getCenter()[dim] < b.getAABB().getCenter()[dim];
+    });
 
     // clang-format on
   } else if (hprofile == EHeuristicProfile::ESurfaceAreaHeuristic) {
