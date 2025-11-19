@@ -23,7 +23,7 @@
 \lstset{basicstyle=\ttfamily}
 
 % Title portion
-\title{Assignment 1:\\ {Exploring OpenGL Programming}} 
+\title{Assignment 3:\\ {Basic Ray Tracing}} 
 
 \author{Name: \quad \\ student number:\
 \\email: \quad \texttt{}}
@@ -35,8 +35,26 @@
 \vspace*{2 ex}
 
 \section{Introduction}
+This assignment walks through every must-have component of a basic ray tracer: geometric intersections, BVH construction, direct lighting with shadow testing, anti-aliasing, and perfect refraction. The project is configured with CMake; running \texttt{cmake -B build} followed by \texttt{cmake --build build} produces all executables and unit tests. The development environment is backed by \texttt{clangd}, ensuring the ``compile and configure language server'' requirement is satisfied.
+
 \section{Implementation Details}
+\subsection{Ray--Geometry Intersections}
+\textbf{Ray--AABB}: In \texttt{src/accel.cpp} I replaced the \texttt{UNIMPLEMENTED} stub inside \texttt{AABB::intersect}. The final code: (1) subtracts the ray origin from the bounding-box bounds, (2) multiplies by \texttt{ray.safe\_inverse\_direction} to obtain parametric times on each axis, (3) uses \texttt{Min/Max} to gather the entry/exit time vectors, (4) folds them with \texttt{std::max/std::min} to get scalar $t_{\text{in}}$/$t_{\text{out}}$, and (5) clamps them against \texttt{ray.t\_min/t\_max}. The function writes both times through the provided pointers and returns whether $t_{\text{out}} \ge t_{\text{in}}$.
+
+\textbf{Ray--Triangle}: The \texttt{TriangleIntersect} routine now performs a double-precision M\"oller--Trumbore solve. I compute edges (\texttt{edge1}, \texttt{edge2}), the cross products, determinant, and inverse determinant. The barycentric coordinates $u$ and $v$ are rejected when they fall outside $[0,1]$ or $u+v>1$. The hit distance $t$ is compared against the ray time interval via \texttt{ray.withinTimeRange}. On success, I call \texttt{CalculateTriangleDifferentials}, assert the hit point matches \texttt{ray(t)}, and shrink \texttt{ray.t\_max} to the intersection distance so that later triangles cannot overwrite a closer hit.
+
+\subsection{BVH Construction}
+The recursive helper \texttt{BVHTree::build} inside \texttt{include/rdr/bvh\_tree.h} was also a stub. I added: (1) a leaf criterion based on span size $\le 2$ or depth $\ge$ \texttt{CUTOFF\_DEPTH}, (2) axis selection using \texttt{ArgMax(prebuilt\_aabb.getExtent())}, (3) median partitioning with \texttt{std::nth\_element} so that elements in $[L,\text{split})$ have smaller centroids on that axis, and (4) recursive construction of child indices followed by storing the precomputed AABB in the current node. The final tree shares the same node array as the primitives, which matches the framework's expectations.
+
+\subsection{IntersectionTestIntegrator and Anti-Aliasing}
+In \texttt{IntersectionTestIntegrator::render} I inserted the missing sampling loop: for each pixel I call \texttt{Sampler::getPixelSample()}, pass the jittered coordinates to \texttt{Camera::generateDifferentialRay}, evaluate radiance via \texttt{Li}, and feed the sample to the film through \texttt{commitSample}. This realizes Monte Carlo anti-aliasing with \texttt{spp} samples per pixel. Within \texttt{Li}, whenever the hit material is \texttt{PerfectRefraction}, I call \texttt{interaction.bsdf->sample()} to obtain the refracted (or reflected) direction and set \texttt{ray} to the spawned ray returned by \texttt{interaction.spawnRay}. The loop continues until the path hits a diffuse surface or escapes the scene.
+
+\subsection{Direct Lighting and Perfect Refraction}
+The direct-lighting function now spawns a shadow ray using \texttt{interaction.spawnRayTo(point\_light\_position)} and calls \texttt{scene->intersect}; any hit immediately returns zero contribution. Otherwise I set \texttt{interaction.wi} to the normalized light direction, evaluate the diffuse BSDF (\texttt{bsdf->evaluate}), multiply by the cosine term \texttt{Dot(light\_dir, normal)} and by the inverse-square distance scaled with the point-light flux. In \texttt{src/bsdf.cpp}, \texttt{PerfectRefraction::sample} determines whether the ray is entering or leaving, adjusts $\eta$, calls \texttt{Refract} to compute the transmitted direction, and falls back to \texttt{Reflect} when total internal reflection occurs; the resulting \texttt{interaction.wi} is normalized before returning to the integrator.
+
 \section{Results}
+I rendered the Cornell-box configuration using \texttt{./build/src/renderer data/cbox\_no\_light\_refract.json -o cbox\_no\_light\_refract.exr}. The output EXR captures the expected shadows and the glass pane refraction; it can be viewed directly with an EXR viewer or converted to PNG for inclusion in the final write-up.
 
 \end{document}
+
 
